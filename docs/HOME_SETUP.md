@@ -116,6 +116,56 @@ You can also set the executable once via env var: `setx AG_EXE "C:\path\to\Antig
 
 ---
 
+## 5b. One command (clone + install + run)
+
+If you'd rather not click, paste this once into **PowerShell on the Windows
+host** — it clones, installs, and launches:
+
+```powershell
+git clone https://github.com/Gonya990/ag_bridge.git "$HOME\ag_bridge"; cd "$HOME\ag_bridge"; .\bootstrap.ps1
+```
+
+Already cloned? Just `.\bootstrap.ps1` (it updates, reinstalls if needed, and runs).
+
+`bootstrap.ps1` options: `-AutoStart` (register logon auto-start), `-NoAg`,
+`-Port 9090`, `-NoRun` (set up without launching), `-Branch <name>`.
+
+### Triggering it from your Mac over SSH
+
+You can run that same command from your Mac if the Windows host has OpenSSH
+Server enabled (Windows: *Settings → System → Optional features → Add → OpenSSH
+Server*, then `Start-Service sshd`). From the Mac:
+
+```bash
+ssh you@windows-host.tailnet-name.ts.net 'powershell -NoProfile -Command "cd $HOME\ag_bridge; .\bootstrap.ps1 -NoRun"'
+```
+
+> Note: a GUI app like Antigravity won't display in an SSH (non-interactive)
+> session. Over SSH, use `-NoRun` to install/update, or `-NoAg` to run only the
+> bridge server; let the **auto-start task** (below) bring up the full GUI stack
+> in your real logon session.
+
+## 5c. Auto-start at logon (set & forget)
+
+Register a Task Scheduler job so the whole stack comes up automatically every
+time you log in — double-click **`install-autostart.cmd`** (it self-elevates),
+or:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install-autostart.ps1
+```
+
+Then:
+
+1. Start it now without rebooting: `Start-ScheduledTask -TaskName "AG Bridge"`
+2. **Pair your phone once** with the Pairing Code — the device token is saved to
+   `data/state.json`.
+3. From then on, every logon brings the bridge up and your phone reconnects
+   automatically (no re-pairing; the Pairing Code changing each boot doesn't
+   matter once a device is paired).
+
+Remove auto-start: `install-autostart.cmd -Remove` (or the `.ps1` with `-Remove`).
+
 ## 6. Updating
 
 ```bat
