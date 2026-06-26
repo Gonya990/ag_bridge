@@ -20,6 +20,18 @@ Chat with your AI agent from your couch, verify tasks, and "poke" it to wake up�
 
 ## Quick Start
 
+### Windows: one click ⚡
+On the home machine, after cloning the repo, just run:
+```bat
+start.cmd
+```
+The launcher starts Antigravity with `--remote-debugging-port=9000`, runs
+`npm install` if needed, reports Tailscale status, and boots the bridge — then
+prints the Pairing Code and the Local / Tailscale URLs. Options:
+`start.cmd -Port 9090`, `start.cmd -NoAg`, `start.cmd -AgExe "C:\path\Antigravity.exe"`.
+
+If you prefer the manual steps, follow along below.
+
 ### 1. Start AG (Critical)
 You **must** start AG from a terminal to enable the Poke:
 ```bash
