@@ -76,6 +76,7 @@ npm run check:bidi
 
 
 ## Documentation
+- [Home Setup (Windows + Tailscale)](docs/HOME_SETUP.md) — full end-to-end runbook
 - [Architecture](docs/architecture.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Security](docs/security.md)
