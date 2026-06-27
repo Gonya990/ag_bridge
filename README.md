@@ -77,6 +77,7 @@ npm run check:bidi
 
 ## Documentation
 - [Home Setup (Windows + Tailscale)](docs/HOME_SETUP.md) — full end-to-end runbook
+- [Run with Claude Code](docs/RUN_WITH_CLAUDE_CODE.md) — let a local agent set it up for you
 - [Architecture](docs/architecture.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Security](docs/security.md)

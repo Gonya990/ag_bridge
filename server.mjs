@@ -4,11 +4,14 @@ import { createServer } from 'http';
 import { networkInterfaces } from 'os';
 import crypto from 'crypto';
 import { mkdir, readFile, writeFile, rename, appendFile } from 'fs/promises';
+import { readFileSync } from 'fs';
 import { spawn, execSync } from 'child_process';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+// Single source of truth for the app version (from package.json).
+const APP_VERSION = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf-8')).version;
 const DATA_DIR = join(__dirname, 'data');
 const LOGS_DIR = join(__dirname, '.logs');
 const LOG_FILE = join(LOGS_DIR, `ag-bridge-${new Date().toISOString().split('T')[0]}.log`);
@@ -370,7 +373,7 @@ const checkAuth = requireAuth; // Alias for consistency with new endpoints
 
 // Public
 app.get('/health', (req, res) => {
-    res.json({ ok: true, name: "ag_bridge", version: "0.5.0", ts: new Date().toISOString() });
+    res.json({ ok: true, name: "ag_bridge", version: APP_VERSION, ts: new Date().toISOString() });
 });
 
 app.post('/pair/claim', (req, res) => {
@@ -554,7 +557,7 @@ app.get('/status', requireAuth, (req, res) => {
     const pending = STATE.approvals.filter(a => a.status === 'pending').length;
     res.json({
         ok: true,
-        version: "0.4.1",
+        version: APP_VERSION,
         ts: new Date().toISOString(),
         pendingApprovals: pending,
         totalApprovals: STATE.approvals.length,
@@ -680,7 +683,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
             const ts = getTailscaleInfo();
 
             console.log('='.repeat(50));
-            console.log(` AG Bridge v${STATE?.version || '1'} running on port ${PORT}`);
+            console.log(` AG Bridge v${APP_VERSION} running on port ${PORT}`);
             console.log('='.repeat(50));
             console.log(` PAIRING CODE: [ ${PAIRING_CODE} ]`);
             console.log('-'.repeat(50));
