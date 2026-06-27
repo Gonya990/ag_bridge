@@ -353,14 +353,36 @@ function checkPolicy(cmd) {
 app.use(express.json());
 app.use(express.static('public'));
 
+function getClientIp(req) {
+    const ip = req.ip || req.socket?.remoteAddress || req.connection?.remoteAddress || '';
+    return ip.replace(/^::ffff:/, '');
+}
+
+function isLocalRequest(req) {
+    const ip = getClientIp(req);
+    return ip === '127.0.0.1' || ip === '::1';
+}
+
+function extractToken(req) { {
+    const headerToken = req.headers['x-ag-token'];
+    if (typeof headerToken === 'string' && headerToken.trim()) {
+        return headerToken.trim();
+    }
+    const auth = req.headers['authorization'];
+    if (typeof auth === 'string' && auth.startsWith('Bearer ')) {
+        const bearer = auth.slice(7).trim();
+        if (bearer) return bearer;
+    }
+    return null;
+}
+
 const requireAuth = (req, res, next) => {
-    // Allow localhost (MCP server) to bypass auth
-    const ip = req.ip || req.connection.remoteAddress;
-    if (ip === '::1' || ip === '127.0.0.1' || ip === '::ffff:127.0.0.1') {
+    // Allow localhost (MCP server, relay on same host) to bypass auth
+    if (isLocalRequest(req)) {
         return next();
     }
 
-    const token = req.headers['x-ag-token'];
+    const token = extractToken(req);
     if (!token || !TOKENS.has(token)) {
         return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -659,7 +681,10 @@ server.on('upgrade', (request, socket, head) => {
         return;
     }
 
-    if (!token || !TOKENS.has(token)) {
+    const wsToken = token?.trim() || null;
+    const remote = request.socket?.remoteAddress?.replace(/^::ffff:/, '') || '';
+    const isLocal = remote === '127.0.0.1' || remote === '::1';
+    if (!isLocal && (!wsToken || !TOKENS.has(wsToken))) {
         socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
         socket.destroy();
         return;
