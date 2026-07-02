@@ -1,8 +1,9 @@
 name: Sync Issue to Notion
 
+# Automatic triggering is disabled. This workflow no longer runs on issue
+# events; it can only be started manually from the Actions tab if needed.
 on:
-  issues:
-    types: [opened, reopened]
+  workflow_dispatch:
 
 jobs:
   sync:
