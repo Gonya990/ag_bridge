@@ -118,8 +118,22 @@ You can also set the executable once via env var: `setx AG_EXE "C:\path\to\Antig
 
 ## 5b. One command (clone + install + run)
 
-If you'd rather not click, paste this once into **PowerShell on the Windows
-host** — it clones, installs, and launches:
+> **Which shell are you in?** Look at the prompt.
+> `C:\Users\you>` is **Command Prompt (cmd.exe)**. `PS C:\Users\you>` is
+> **PowerShell**. The syntax differs — `$HOME` and `;` are PowerShell-only, and
+> pasting them into cmd fails with errors like `unknown switch 'A'`. Use the
+> block that matches your prompt.
+
+**Command Prompt (cmd.exe):** paste these (they use `&&` and `%USERPROFILE%`):
+
+```bat
+git clone https://github.com/Gonya990/ag_bridge.git "%USERPROFILE%\ag_bridge" && cd /d "%USERPROFILE%\ag_bridge" && start.cmd
+```
+
+Already cloned? Just `cd /d "%USERPROFILE%\ag_bridge"` then `start.cmd`.
+For auto-start, run `install-autostart.cmd` (it self-elevates).
+
+**PowerShell:** it clones, installs, and launches via `bootstrap.ps1`:
 
 ```powershell
 git clone https://github.com/Gonya990/ag_bridge.git "$HOME\ag_bridge"; cd "$HOME\ag_bridge"; .\bootstrap.ps1
@@ -129,6 +143,9 @@ Already cloned? Just `.\bootstrap.ps1` (it updates, reinstalls if needed, and ru
 
 `bootstrap.ps1` options: `-AutoStart` (register logon auto-start), `-NoAg`,
 `-Port 9090`, `-NoRun` (set up without launching), `-Branch <name>`.
+
+> Not sure? The simplest path works from either shell: clone once, then
+> **double-click `start.cmd`** in File Explorer.
 
 ### Triggering it from your Mac over SSH
 
