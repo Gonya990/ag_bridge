@@ -360,7 +360,7 @@ function isLocalRequest(req) {
     return ip === '127.0.0.1' || ip === '::1';
 }
 
-function extractToken(req) { {
+function extractToken(req) {
     const headerToken = req.headers['x-ag-token'];
     if (typeof headerToken === 'string' && headerToken.trim()) {
         return headerToken.trim();
