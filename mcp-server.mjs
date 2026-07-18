@@ -11,7 +11,7 @@ import path from 'path';
 const AG_BRIDGE_URL = process.env.AG_BRIDGE_URL || "http://127.0.0.1:8787";
 const AG_BRIDGE_TOKEN = process.env.AG_BRIDGE_TOKEN || ""; // Optional
 const AG_REPO_ROOT = process.env.AG_REPO_ROOT ? path.resolve(process.env.AG_REPO_ROOT) : process.cwd();
-const AG_NTFY_TOPIC = process.env.AG_NTFY_TOPIC || "ag_bridge_alerts"; // Public default!
+const AG_NTFY_TOPIC = process.env.AG_NTFY_TOPIC || ""; // задайте СЕКРЕТНЫЙ топик через env; пусто = уведомления выключены (не течёт на публичный ntfy.sh)
 
 // --- Helpers ---
 async function api(method, endpoint, body) {
@@ -208,6 +208,9 @@ const TOOLS = {
         }),
         handler: async (args) => {
             const topic = AG_NTFY_TOPIC;
+            if (!topic) {
+                return { content: [{ type: "text", text: "notify_user отключён: задайте секретный AG_NTFY_TOPIC в env (публичный дефолт убран)." }], isError: true };
+            }
             try {
                 const headers = {};
                 if (args.title) headers["Title"] = args.title;
