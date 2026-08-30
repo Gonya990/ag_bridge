@@ -10,6 +10,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+// Single source of truth for the app version (from package.json).
 const APP_VERSION = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf-8')).version;
 const DATA_DIR = join(__dirname, 'data');
 const LOGS_DIR = join(__dirname, '.logs');
@@ -382,29 +383,6 @@ app.get('/share', (req, res) => {
     res.sendFile(join(__dirname, 'public', 'index.html'));
 });
 
-function getClientIp(req) {
-    const ip = req.ip || req.socket?.remoteAddress || req.connection?.remoteAddress || '';
-    return ip.replace(/^::ffff:/, '');
-}
-
-function isLocalRequest(req) {
-    const ip = getClientIp(req);
-    return ip === '127.0.0.1' || ip === '::1';
-}
-
-function extractToken(req) {
-    const headerToken = req.headers['x-ag-token'];
-    if (typeof headerToken === 'string' && headerToken.trim()) {
-        return headerToken.trim();
-    }
-    const auth = req.headers['authorization'];
-    if (typeof auth === 'string' && auth.startsWith('Bearer ')) {
-        const bearer = auth.slice(7).trim();
-        if (bearer) return bearer;
-    }
-    return null;
-}
-
 function readFamilyCoreWorkerStatus() {
     try {
         const data = JSON.parse(readFileSync(FAMILY_CORE_WORKER_STATUS_FILE, 'utf-8'));
@@ -478,6 +456,29 @@ function readFamilyCoreInboxItems(limit = 20) {
     return [...byId.values()]
         .sort((a, b) => new Date(b.processedAt || b.createdAt) - new Date(a.processedAt || a.createdAt))
         .slice(0, limit);
+}
+
+function getClientIp(req) {
+    const ip = req.ip || req.socket?.remoteAddress || req.connection?.remoteAddress || '';
+    return ip.replace(/^::ffff:/, '');
+}
+
+function isLocalRequest(req) {
+    const ip = getClientIp(req);
+    return ip === '127.0.0.1' || ip === '::1';
+}
+
+function extractToken(req) {
+    const headerToken = req.headers['x-ag-token'];
+    if (typeof headerToken === 'string' && headerToken.trim()) {
+        return headerToken.trim();
+    }
+    const auth = req.headers['authorization'];
+    if (typeof auth === 'string' && auth.startsWith('Bearer ')) {
+        const bearer = auth.slice(7).trim();
+        if (bearer) return bearer;
+    }
+    return null;
 }
 
 const requireAuth = (req, res, next) => {
