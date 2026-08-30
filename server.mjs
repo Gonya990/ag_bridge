@@ -1,4 +1,5 @@
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
 import { networkInterfaces } from 'os';
@@ -379,7 +380,14 @@ function checkPolicy(cmd) {
 app.use(express.json());
 app.use(express.static('public'));
 
-app.get('/share', (req, res) => {
+const shareRouteLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 120,
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
+app.get('/share', shareRouteLimiter, (req, res) => {
     res.sendFile(join(__dirname, 'public', 'index.html'));
 });
 

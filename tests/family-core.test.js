@@ -11,6 +11,7 @@ describe('Family Core job queue', () => {
         expect(res.status).toBe(200);
         expect(res.text).toContain('Family Core');
         expect(res.text).toContain('function importFamilySharePayload()');
+        expect(res.headers).toHaveProperty('ratelimit-limit');
     });
 
     it('creates a local Mac processing job', async () => {
