@@ -36,6 +36,7 @@ If you prefer the manual steps, follow along below.
 You **must** start AG from a terminal to enable the Poke:
 ```bash
 antigravity.exe . --remote-debugging-port=9000
+```
 
 *(If the Agent doesn't "wake up", this is usually why.)*
 
@@ -79,6 +80,7 @@ npm run check:bidi
 - [Home Setup (Windows + Tailscale)](docs/HOME_SETUP.md) — full end-to-end runbook
 - [Run with Claude Code](docs/RUN_WITH_CLAUDE_CODE.md) — let a local agent set it up for you
 - [Architecture](docs/architecture.md)
+- [Family Core mobile handoff](docs/family_core_mobile_handoff.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Security](docs/security.md)
 

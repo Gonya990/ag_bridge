@@ -2,9 +2,24 @@
     "name": "AG Bridge",
     "short_name": "AG Bridge",
     "start_url": "/",
+    "scope": "/",
     "display": "standalone",
     "background_color": "#0f1115",
     "theme_color": "#0f1115",
+    "description": "Local Mac bridge for approvals, Family Core handoff, and mobile-to-Mac processing.",
+    "categories": [
+        "productivity",
+        "utilities"
+    ],
+    "share_target": {
+        "action": "/share",
+        "method": "GET",
+        "params": {
+            "title": "title",
+            "text": "text",
+            "url": "url"
+        }
+    },
     "icons": [
         {
             "src": "icons/icon-192.png",

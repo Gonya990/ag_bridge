@@ -83,6 +83,37 @@ const TOOLS = {
         }
     },
 
+    family_core_jobs: {
+        schema: z.object({
+            status: z.enum(["queued", "processing", "done", "failed", "all"]).optional(),
+            limit: z.number().optional()
+        }),
+        handler: async (args) => {
+            const q = new URLSearchParams();
+            if (args.status && args.status !== "all") q.append("status", args.status);
+            if (args.limit) q.append("limit", args.limit.toString());
+
+            const suffix = q.toString() ? `?${q.toString()}` : "";
+            const res = await api("GET", `/family-core/jobs${suffix}`);
+            return { content: [{ type: "text", text: JSON.stringify(res.jobs, null, 2) }] };
+        }
+    },
+
+    family_core_job_status: {
+        schema: z.object({
+            id: z.string(),
+            status: z.enum(["queued", "processing", "done", "failed"]),
+            note: z.string().optional()
+        }),
+        handler: async (args) => {
+            const res = await api("POST", `/family-core/jobs/${args.id}/status`, {
+                status: args.status,
+                note: args.note
+            });
+            return { content: [{ type: "text", text: `Family Core job ${res.job.id} is ${res.job.status}` }] };
+        }
+    },
+
     agent_heartbeat: {
         schema: z.object({
             state: z.enum(["idle", "working", "waiting", "error"]),
@@ -299,6 +330,30 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                     properties: {
                         id: { type: "string" },
                         status: { type: "string", enum: ["read", "done"] }
+                    },
+                    required: ["id", "status"]
+                }
+            },
+            {
+                name: "family_core_jobs",
+                description: "Get Family Core library jobs queued from the phone for local Mac processing",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        status: { type: "string", enum: ["queued", "processing", "done", "failed", "all"] },
+                        limit: { type: "number" }
+                    }
+                }
+            },
+            {
+                name: "family_core_job_status",
+                description: "Update a Family Core local processing job status",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        id: { type: "string" },
+                        status: { type: "string", enum: ["queued", "processing", "done", "failed"] },
+                        note: { type: "string" }
                     },
                     required: ["id", "status"]
                 }

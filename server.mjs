@@ -1,10 +1,11 @@
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
 import { networkInterfaces } from 'os';
 import crypto from 'crypto';
-import { mkdir, readFile, writeFile, rename, appendFile } from 'fs/promises';
-import { readFileSync } from 'fs';
+import { mkdir, readFile, writeFile, rename, appendFile, chmod } from 'fs/promises';
+import { readFileSync, readdirSync } from 'fs';
 import { spawn, execSync } from 'child_process';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -16,6 +17,9 @@ const DATA_DIR = join(__dirname, 'data');
 const LOGS_DIR = join(__dirname, '.logs');
 const LOG_FILE = join(LOGS_DIR, `ag-bridge-${new Date().toISOString().split('T')[0]}.log`);
 const STATE_FILE = join(DATA_DIR, 'state.json');
+const FAMILY_CORE_WORKER_STATUS_FILE = join(DATA_DIR, 'family-core-worker-status.json');
+const FAMILY_CORE_INBOX_DIR = join(DATA_DIR, 'family-core-inbox');
+const FAMILY_CORE_INBOX_INDEX_FILE = join(FAMILY_CORE_INBOX_DIR, 'index.json');
 const APPROVALS_FILE = join(DATA_DIR, 'approvals.json');
 const POLICY_FILE = join(__dirname, 'policy.json');
 let POLICY = { version: 2, profiles: { relaxed: { allow: [".*"] }, balanced: { allow: [] } }, globalDeny: [] };
@@ -30,6 +34,7 @@ const hasArg = (name) => args.includes(name);
 
 const PORT = parseInt(getArg('--port') || process.env.PORT || '8787');
 const HOST = getArg('--host') || '0.0.0.0';
+const PAIRING_CODE_FILE = join(LOGS_DIR, `pairing-code-${PORT}.txt`);
 
 export const app = express();
 export const server = createServer(app);
@@ -135,6 +140,7 @@ let STATE = {
     strictMode: true,
     approvals: [],
     messages: [],
+    familyCoreJobs: [],
     agent: { state: 'idle', lastSeen: null, task: '', note: '' },
     checkpoints: [],
     tokens: [] // Changed from optional to persisted for UX stability
@@ -209,6 +215,25 @@ async function log(component, message, data = null) {
     } catch (e) { /* ignore log errors */ }
 }
 
+async function writePairingCodeFile() {
+    try {
+        await mkdir(LOGS_DIR, { recursive: true });
+        const content = [
+            `AG Bridge v${APP_VERSION}`,
+            `host=${HOST}`,
+            `port=${PORT}`,
+            `pairing_code=${PAIRING_CODE}`,
+            `updated_at=${new Date().toISOString()}`,
+            ''
+        ].join('\n');
+        await writeFile(PAIRING_CODE_FILE, content, { mode: 0o600 });
+        await chmod(PAIRING_CODE_FILE, 0o600);
+        console.log(` Pairing code file: ${PAIRING_CODE_FILE}`);
+    } catch (err) {
+        console.warn(`[AUTH] Failed to write pairing code file: ${err.message}`);
+    }
+}
+
 // --- Persistence ---
 let saveTimeout = null;
 async function saveState() {
@@ -221,6 +246,7 @@ async function saveState() {
                 strictMode: STATE.strictMode,
                 // approvals: STATE.approvals, // Scoped to approvals.json now
                 messages: STATE.messages,
+                familyCoreJobs: STATE.familyCoreJobs,
                 agent: STATE.agent,
                 checkpoints: STATE.checkpoints,
                 tokens: Array.from(TOKENS)
@@ -266,6 +292,7 @@ async function loadState() {
         if (typeof data.strictMode === 'boolean') STATE.strictMode = data.strictMode;
         // if (Array.isArray(data.approvals)) STATE.approvals = data.approvals; // Legacy load
         if (Array.isArray(data.messages)) STATE.messages = data.messages;
+        if (Array.isArray(data.familyCoreJobs)) STATE.familyCoreJobs = data.familyCoreJobs;
         if (data.agent) STATE.agent = data.agent;
         if (Array.isArray(data.checkpoints)) STATE.checkpoints = data.checkpoints;
         if (Array.isArray(data.tokens)) {
@@ -352,6 +379,92 @@ function checkPolicy(cmd) {
 // --- Middleware ---
 app.use(express.json());
 app.use(express.static('public'));
+
+const shareRouteLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 120,
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
+app.get('/share', shareRouteLimiter, (req, res) => {
+    res.sendFile(join(__dirname, 'public', 'index.html'));
+});
+
+function readFamilyCoreWorkerStatus() {
+    try {
+        const data = JSON.parse(readFileSync(FAMILY_CORE_WORKER_STATUS_FILE, 'utf-8'));
+        const updatedAtMs = Date.parse(data.updatedAt || data.lastPollAt || '');
+        const ageMs = Number.isFinite(updatedAtMs) ? Date.now() - updatedAtMs : null;
+        return {
+            state: ageMs !== null && ageMs <= 60000 ? data.state || 'running' : 'stale',
+            updatedAt: data.updatedAt || null,
+            lastPollAt: data.lastPollAt || null,
+            lastProcessedAt: data.lastProcessedAt || null,
+            processed: data.processed || 0,
+            failed: data.failed || 0,
+            ageMs
+        };
+    } catch {
+        return {
+            state: 'offline',
+            updatedAt: null,
+            lastPollAt: null,
+            lastProcessedAt: null,
+            processed: 0,
+            failed: 0,
+            ageMs: null
+        };
+    }
+}
+
+function readFamilyCoreInboxItems(limit = 20) {
+    const byId = new Map();
+    const addItem = (item) => {
+        if (!item?.id || byId.has(item.id)) return;
+        byId.set(item.id, {
+            id: item.id,
+            title: item.title,
+            source: item.source,
+            createdAt: item.createdAt,
+            processedAt: item.processedAt,
+            mdPath: item.mdPath,
+            jsonPath: item.jsonPath,
+            mdFile: item.mdFile,
+            jsonFile: item.jsonFile
+        });
+    };
+
+    try {
+        const data = JSON.parse(readFileSync(FAMILY_CORE_INBOX_INDEX_FILE, 'utf-8'));
+        const items = Array.isArray(data.items) ? data.items : [];
+        items.forEach(addItem);
+    } catch { /* missing index is fine */ }
+
+    try {
+        for (const file of readdirSync(FAMILY_CORE_INBOX_DIR)) {
+            if (!file.endsWith('.json') || file === 'index.json') continue;
+            const jsonPath = join(FAMILY_CORE_INBOX_DIR, file);
+            const data = JSON.parse(readFileSync(jsonPath, 'utf-8'));
+            const mdFile = file.replace(/\.json$/, '.md');
+            addItem({
+                id: data.id,
+                title: data.title,
+                source: data.source,
+                createdAt: data.createdAt,
+                processedAt: data.processedAt || data.updatedAt || data.createdAt,
+                mdPath: join(FAMILY_CORE_INBOX_DIR, mdFile),
+                jsonPath,
+                mdFile,
+                jsonFile: file
+            });
+        }
+    } catch { /* inbox directory may not exist yet */ }
+
+    return [...byId.values()]
+        .sort((a, b) => new Date(b.processedAt || b.createdAt) - new Date(a.processedAt || a.createdAt))
+        .slice(0, limit);
+}
 
 function getClientIp(req) {
     const ip = req.ip || req.socket?.remoteAddress || req.connection?.remoteAddress || '';
@@ -552,6 +665,89 @@ app.post('/messages/:id/ack', checkAuth, (req, res) => {
     res.json({ ok: true });
 });
 
+// POST /family-core/jobs
+app.post('/family-core/jobs', checkAuth, (req, res) => {
+    const { title, source, note, payload } = req.body || {};
+    const cleanTitle = typeof title === 'string' ? title.trim() : '';
+
+    if (!cleanTitle) {
+        return res.status(400).json({ ok: false, error: 'missing_title' });
+    }
+
+    const job = {
+        id: 'fcj_' + Date.now().toString(36) + crypto.randomBytes(3).toString('hex'),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        source: typeof source === 'string' && source.trim() ? source.trim() : 'phone',
+        title: cleanTitle,
+        note: typeof note === 'string' ? note.trim() : '',
+        payload: payload && typeof payload === 'object' ? payload : null,
+        status: 'queued'
+    };
+
+    STATE.familyCoreJobs.push(job);
+    if (STATE.familyCoreJobs.length > 100) STATE.familyCoreJobs.shift();
+    saveState();
+
+    broadcast('family_core_job_new', job);
+    res.json({ ok: true, job });
+});
+
+// GET /family-core/jobs
+app.get('/family-core/jobs', checkAuth, (req, res) => {
+    const { status, limit } = req.query;
+    let items = STATE.familyCoreJobs || [];
+
+    if (status) items = items.filter(job => job.status === status);
+    items = [...items].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    const parsedLimit = Number.parseInt(limit, 10);
+    if (Number.isFinite(parsedLimit) && parsedLimit > 0) {
+        items = items.slice(0, parsedLimit);
+    }
+
+    res.json({ ok: true, jobs: items });
+});
+
+// GET /family-core/inbox
+app.get('/family-core/inbox', checkAuth, (req, res) => {
+    const parsedLimit = Number.parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 100) : 20;
+    res.json({ ok: true, items: readFamilyCoreInboxItems(limit) });
+});
+
+// POST /family-core/jobs/:id/status
+app.post('/family-core/jobs/:id/status', checkAuth, (req, res) => {
+    const { id } = req.params;
+    const { status, note, fromStatus } = req.body || {};
+    const allowed = new Set(['queued', 'processing', 'done', 'failed']);
+
+    if (!allowed.has(status)) {
+        return res.status(400).json({ ok: false, error: 'invalid_status' });
+    }
+
+    const job = (STATE.familyCoreJobs || []).find(item => item.id === id);
+    if (!job) return res.status(404).json({ ok: false, error: 'not_found' });
+
+    if (typeof fromStatus === 'string' && job.status !== fromStatus) {
+        return res.status(409).json({
+            ok: false,
+            error: 'status_mismatch',
+            expected: fromStatus,
+            currentStatus: job.status,
+            job
+        });
+    }
+
+    job.status = status;
+    job.updatedAt = new Date().toISOString();
+    if (typeof note === 'string') job.note = note.trim();
+    saveState();
+
+    broadcast('family_core_job_status', { id, status: job.status, updatedAt: job.updatedAt });
+    res.json({ ok: true, job });
+});
+
 // POST /agent/heartbeat
 app.post('/agent/heartbeat', checkAuth, (req, res) => {
     const { state, task, note } = req.body;
@@ -577,11 +773,17 @@ app.get('/agent/status', checkAuth, (req, res) => {
 // GET /status (Observability)
 app.get('/status', requireAuth, (req, res) => {
     const pending = STATE.approvals.filter(a => a.status === 'pending').length;
+    const queuedFamilyCoreJobs = (STATE.familyCoreJobs || []).filter(job => job.status === 'queued').length;
+    const familyCoreWorker = readFamilyCoreWorkerStatus();
+    const familyCoreInboxCount = readFamilyCoreInboxItems(100).length;
     res.json({
         ok: true,
         version: APP_VERSION,
         ts: new Date().toISOString(),
         pendingApprovals: pending,
+        queuedFamilyCoreJobs,
+        familyCoreWorker,
+        familyCoreInboxCount,
         totalApprovals: STATE.approvals.length,
         strictMode: STATE.strictMode,
         cdp: {
@@ -711,6 +913,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
             console.log(` AG Bridge v${APP_VERSION} running on port ${PORT}`);
             console.log('='.repeat(50));
             console.log(` PAIRING CODE: [ ${PAIRING_CODE} ]`);
+            writePairingCodeFile();
             console.log('-'.repeat(50));
 
             console.log(' Local (same Wi-Fi):');

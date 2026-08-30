@@ -73,7 +73,7 @@ You'll see something like:
 ==================================================
  AG Bridge v0.6.0 running on port 8787
 ==================================================
- PAIRING CODE: [ 733403 ]
+ PAIRING CODE: [ shown in your console ]
 --------------------------------------------------
  Local (same Wi-Fi):
  http://192.168.1.50:8787

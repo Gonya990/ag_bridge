@@ -24,6 +24,8 @@ Thumbs.db
 
 # Project Specific
 data/state.json
+data/family-core-worker-status.json
+data/family-core-inbox/
 .valkyrie
 .venv/
 mcp_debug.log
