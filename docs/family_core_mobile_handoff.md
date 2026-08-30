@@ -137,6 +137,14 @@ One-shot check:
 node scripts/family-core-worker.mjs --once
 ```
 
+Whole-section status check:
+
+```bash
+npm run status:family-core
+```
+
+This read-only check verifies the local bridge, worker heartbeat, Mac Inbox summary, LAN `/share` entrypoint, private Sites publication, and current Windows PC visibility.
+
 ## Verification
 
 Expected quick checks:
