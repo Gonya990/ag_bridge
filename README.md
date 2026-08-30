@@ -24,6 +24,7 @@ Chat with your AI agent from your couch, verify tasks, and "poke" it to wake upâ
 You **must** start AG from a terminal to enable the Poke:
 ```bash
 antigravity.exe . --remote-debugging-port=9000
+```
 
 *(If the Agent doesn't "wake up", this is usually why.)*
 
@@ -65,6 +66,7 @@ npm run check:bidi
 
 ## Documentation
 - [Architecture](docs/architecture.md)
+- [Family Core mobile handoff](docs/family_core_mobile_handoff.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Security](docs/security.md)
 

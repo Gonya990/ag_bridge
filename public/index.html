@@ -4,7 +4,6 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <link rel="manifest" href="manifest.json">
   <title>AG Bridge</title>
   <style>
@@ -16,6 +15,7 @@
       --primary: #3b82f6;
       --success: #10b981;
       --danger: #ef4444;
+      --warning: #f59e0b;
       --border: #374151;
     }
 
@@ -144,10 +144,11 @@
     /* Cards */
     .card {
       background: var(--card-bg);
-      border-radius: 12px;
+      border-radius: 8px;
       padding: 16px;
       margin-bottom: 16px;
       border: 1px solid var(--border);
+      transition: border-color 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
     }
 
     .approval-item {
@@ -162,6 +163,22 @@
     .approval-item.status-denied {
       border-left-color: var(--danger);
       opacity: 0.6;
+    }
+
+    .job-item {
+      border-left: 4px solid var(--primary);
+      border-top: 1px solid var(--border);
+      padding: 14px 0 14px 12px;
+      animation: item-in 0.18s ease-out;
+    }
+
+    .job-item.status-done {
+      border-left-color: var(--success);
+      opacity: 0.72;
+    }
+
+    .job-item.status-failed {
+      border-left-color: var(--danger);
     }
 
     .tag {
@@ -186,6 +203,52 @@
     .tag.denied {
       background: var(--danger);
       color: white;
+    }
+
+    .tag.queued {
+      background: #d97706;
+      color: white;
+    }
+
+    .tag.processing {
+      background: var(--primary);
+      color: white;
+    }
+
+    .tag.done {
+      background: var(--success);
+      color: white;
+    }
+
+    .tag.failed {
+      background: var(--danger);
+      color: white;
+    }
+
+    .save-state {
+      min-height: 18px;
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .save-state.ready {
+      color: var(--success);
+    }
+
+    .save-state.error {
+      color: var(--danger);
+    }
+
+    @keyframes item-in {
+      from {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
 
     pre {
@@ -294,6 +357,20 @@
       border-radius: 6px;
     }
 
+    textarea {
+      width: 100%;
+      min-height: 78px;
+      box-sizing: border-box;
+      margin-top: 10px;
+      background: #1a1a1a;
+      border: 1px solid #444;
+      color: white;
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 15px;
+      resize: vertical;
+    }
+
     .quick-actions {
       display: flex;
       gap: 5px;
@@ -333,6 +410,12 @@
       color: var(--danger);
       border: 1px solid var(--danger);
     }
+
+    .agent-status.stale,
+    .agent-status.degraded {
+      color: var(--warning);
+      border: 1px solid var(--warning);
+    }
   </style>
 </head>
 
@@ -351,8 +434,9 @@
     <header>
       <div class="flex items-center">
         <span id="ws-status" class="status-dot"></span>
-        <h2 style="font-size:18px;">Dashboard <span style="font-size:10px; opacity:0.5">v0.3.1</span></h2>
+        <h2 style="font-size:18px;">Dashboard <span id="app-version" style="font-size:10px; opacity:0.5">v0.6.0</span></h2>
         <span id="agent-status-pill" class="agent-status">Agent: ???</span>
+        <span id="worker-status-pill" class="agent-status">Worker: ???</span>
       </div>
       <div class="flex gap-2">
         <button id="strict-btn" class="secondary" style="width: auto; padding: 8px 12px; font-size: 14px;"
@@ -382,10 +466,28 @@
     </div>
 
     <div class="card">
+      <div class="flex justify-between items-center mb-4">
+        <h3>Family Core</h3>
+        <span class="tag queued"><span id="family-job-count">0</span> queued</span>
+      </div>
+      <input type="text" id="family-job-title" class="chat-input" placeholder="What should Mac process?" />
+      <textarea id="family-job-note" placeholder="Optional note, link, or instructions..."></textarea>
+      <button id="family-submit-btn" onclick="submitFamilyCoreJob()" class="mt-4">Send to Mac</button>
+      <div id="family-save-state" class="save-state">Draft saved on this device.</div>
+      <div id="family-jobs-list" class="mt-4">
+        <p style="text-align:center; padding: 20px;">No Family Core jobs.</p>
+      </div>
+    </div>
+
+    <div class="card">
       <div class="flex justify-between items-center">
         <div>
           <div style="font-size: 32px; font-weight: bold;" id="pending-count">0</div>
           <div style="font-size: 12px; color: var(--text-dim);">PENDING</div>
+        </div>
+        <div>
+          <div style="font-size: 32px; font-weight: bold;" id="queued-family-count">0</div>
+          <div style="font-size: 12px; color: var(--text-dim);">FAMILY CORE</div>
         </div>
         <div>
           <button class="secondary" style="font-size: 12px; padding: 8px;" onclick="createTestApproval()">+ Test
@@ -393,6 +495,16 @@
           <button class="secondary" style="font-size: 12px; padding: 8px; margin-top: 4px;"
             onclick="requestRealApproval()">+ Request (New)</button>
         </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="flex justify-between items-center mb-4">
+        <h3>Mac Inbox</h3>
+        <span class="tag done"><span id="family-inbox-count">0</span> saved</span>
+      </div>
+      <div id="family-inbox-list">
+        <p style="text-align:center; padding: 20px;">No saved inbox items.</p>
       </div>
     </div>
 
@@ -412,11 +524,14 @@
     const API_BASE = ''; // Relative path
     let TOKEN = localStorage.getItem('ag-token');
     let WS = null;
+    let POLL_TIMER = null;
+    const FAMILY_DRAFT_KEY = 'family-core-draft';
 
     // --- Init ---
     function init() {
       // DEBUG: Alert to confirm JS running
-      // alert('DEBUG: Init running'); 
+      // alert('DEBUG: Init running');
+      importFamilySharePayload();
       const savedToken = localStorage.getItem('ag-token');
       if (savedToken) {
         logEvent('Found token, loading dashboard...');
@@ -429,6 +544,11 @@
         fetchApprovals().catch(e => logEvent('FetchApprovals Error: ' + e.message));
         fetchMessages().catch(e => logEvent('FetchMessages Error: ' + e.message));
         fetchAgentStatus().catch(e => logEvent('FetchAgent Error: ' + e.message));
+        fetchFamilyCoreJobs().catch(e => logEvent('FetchFamilyCoreJobs Error: ' + e.message));
+        fetchFamilyCoreInbox().catch(e => logEvent('FetchFamilyCoreInbox Error: ' + e.message));
+        restoreFamilyDraft();
+        bindFamilyDraftAutosave();
+        startPolling();
 
         connectWS();
       } else {
@@ -450,13 +570,67 @@
       fetchApprovals();
       fetchMessages();
       fetchAgentStatus();
+      fetchFamilyCoreJobs();
+      fetchFamilyCoreInbox();
+      restoreFamilyDraft();
+      bindFamilyDraftAutosave();
       connectWS();
+      startPolling();
+    }
 
-      // Polling Fallback (every 5s)
-      setInterval(() => {
+    function getFamilySharePayload() {
+      const params = new URLSearchParams(window.location.search);
+      const title = (params.get('title') || '').trim();
+      const text = (params.get('text') || '').trim();
+      const url = (params.get('url') || '').trim();
+      if (!title && !text && !url) return null;
+
+      const fallbackTitle = title || text.split(/\s+/).slice(0, 10).join(' ') || url || 'Shared from phone';
+      const noteParts = [];
+      if (text && text !== fallbackTitle) noteParts.push(text);
+      if (url && url !== text) noteParts.push(url);
+
+      return {
+        title: fallbackTitle.slice(0, 120),
+        note: noteParts.join('\n'),
+        updatedAt: new Date().toISOString(),
+        source: 'share'
+      };
+    }
+
+    function importFamilySharePayload() {
+      const share = getFamilySharePayload();
+      if (!share) return false;
+
+      const existing = readFamilyDraft();
+      const draft = {
+        title: share.title || existing.title || '',
+        note: share.note || existing.note || '',
+        updatedAt: share.updatedAt,
+        source: 'share'
+      };
+      localStorage.setItem(FAMILY_DRAFT_KEY, JSON.stringify(draft));
+
+      const titleInput = document.getElementById('family-job-title');
+      const noteInput = document.getElementById('family-job-note');
+      if (titleInput) titleInput.value = draft.title;
+      if (noteInput) noteInput.value = draft.note;
+      setSaveState('Shared item ready to send.', 'ready');
+
+      if (window.history?.replaceState) {
+        window.history.replaceState({}, document.title, '/');
+      }
+      return true;
+    }
+
+    function startPolling() {
+      if (POLL_TIMER) return;
+      POLL_TIMER = setInterval(() => {
         fetchMessages();
         fetchAgentStatus();
         fetchStatus(); // Also good to keep pending count fresh
+        fetchFamilyCoreJobs();
+        fetchFamilyCoreInbox();
       }, 5000);
     }
 
@@ -473,6 +647,48 @@
       div.className = 'log-entry';
       div.innerHTML = `<span>[${new Date().toLocaleTimeString()}]</span> ${msg}`;
       el.prepend(div);
+    }
+
+    function setSaveState(text, mode = '') {
+      const el = document.getElementById('family-save-state');
+      if (!el) return;
+      el.innerText = text;
+      el.className = `save-state ${mode}`.trim();
+    }
+
+    function readFamilyDraft() {
+      try {
+        return JSON.parse(localStorage.getItem(FAMILY_DRAFT_KEY) || '{}');
+      } catch {
+        return {};
+      }
+    }
+
+    function writeFamilyDraft() {
+      const title = document.getElementById('family-job-title')?.value || '';
+      const note = document.getElementById('family-job-note')?.value || '';
+      localStorage.setItem(FAMILY_DRAFT_KEY, JSON.stringify({ title, note, updatedAt: new Date().toISOString() }));
+      setSaveState(title || note ? 'Draft saved on this device.' : 'Ready.');
+    }
+
+    function restoreFamilyDraft() {
+      const titleInput = document.getElementById('family-job-title');
+      const noteInput = document.getElementById('family-job-note');
+      if (!titleInput || !noteInput) return;
+      const draft = readFamilyDraft();
+      if (!titleInput.value && draft.title) titleInput.value = draft.title;
+      if (!noteInput.value && draft.note) noteInput.value = draft.note;
+      setSaveState(draft.title || draft.note ? 'Draft restored from this device.' : 'Ready.', draft.title || draft.note ? 'ready' : '');
+    }
+
+    function bindFamilyDraftAutosave() {
+      const titleInput = document.getElementById('family-job-title');
+      const noteInput = document.getElementById('family-job-note');
+      if (!titleInput || !noteInput || titleInput.dataset.autosaveBound) return;
+      titleInput.dataset.autosaveBound = 'true';
+      noteInput.dataset.autosaveBound = 'true';
+      titleInput.addEventListener('input', writeFamilyDraft);
+      noteInput.addEventListener('input', writeFamilyDraft);
     }
 
     // --- Auth ---
@@ -544,6 +760,20 @@
       }
     }
 
+    async function fetchFamilyCoreJobs() {
+      const data = await api('/family-core/jobs?limit=25');
+      if (data && data.jobs) {
+        renderFamilyCoreJobs(data.jobs);
+      }
+    }
+
+    async function fetchFamilyCoreInbox() {
+      const data = await api('/family-core/inbox?limit=10');
+      if (data && data.items) {
+        renderFamilyCoreInbox(data.items);
+      }
+    }
+
     function renderMessages(msgs) {
       const thread = document.getElementById('chat-thread');
       if (msgs.length === 0) {
@@ -589,6 +819,121 @@
       input.value = '';
     }
 
+    async function submitFamilyCoreJob() {
+      const titleInput = document.getElementById('family-job-title');
+      const noteInput = document.getElementById('family-job-note');
+      const submitButton = document.getElementById('family-submit-btn');
+      const title = titleInput.value.trim();
+      const note = noteInput.value.trim();
+      if (!title) return alert('Add a short task title first');
+
+      submitButton.disabled = true;
+      submitButton.innerText = 'Sending...';
+      setSaveState('Sending to Mac...');
+      const data = await api('/family-core/jobs', 'POST', {
+        title,
+        note,
+        source: 'phone',
+        payload: {
+          app: 'Family Knowledge Library',
+          requestedFrom: navigator.userAgent
+        }
+      });
+
+      if (data && data.ok) {
+        titleInput.value = '';
+        noteInput.value = '';
+        localStorage.removeItem(FAMILY_DRAFT_KEY);
+        setSaveState('Sent to Mac.', 'ready');
+        fetchFamilyCoreJobs();
+        fetchFamilyCoreInbox();
+        fetchStatus();
+      } else {
+        setSaveState('Could not send. Draft stayed on this device.', 'error');
+      }
+      submitButton.disabled = false;
+      submitButton.innerText = 'Send to Mac';
+    }
+
+    async function setFamilyCoreJobStatus(id, status) {
+      const data = await api(`/family-core/jobs/${id}/status`, 'POST', { status });
+      if (data && data.ok) {
+        logEvent(`Family Core job ${status}`);
+        fetchFamilyCoreJobs();
+        fetchFamilyCoreInbox();
+        fetchStatus();
+      }
+    }
+
+    function renderFamilyCoreJobs(jobs) {
+      const container = document.getElementById('family-jobs-list');
+      const queuedCount = jobs.filter(job => job.status === 'queued').length;
+      document.getElementById('family-job-count').innerText = queuedCount;
+      document.getElementById('queued-family-count').innerText = queuedCount;
+
+      if (jobs.length === 0) {
+        container.innerHTML = '<p style="text-align:center; padding: 20px;">No Family Core jobs.</p>';
+        return;
+      }
+
+      container.innerHTML = jobs.map(job => {
+        const created = new Date(job.createdAt).toLocaleString([], {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+        const note = job.note ? `<p>${escapeHtml(job.note)}</p>` : '';
+        return `
+          <div class="job-item status-${job.status}">
+            <div class="flex justify-between items-center mb-4">
+              <span class="tag ${job.status}">${job.status}</span>
+              <span style="font-size:12px; color:var(--text-dim)">${created}</span>
+            </div>
+            <div style="font-weight:bold; margin-bottom: 4px;">${escapeHtml(job.title)}</div>
+            ${note}
+            ${job.status !== 'done' ? `
+              <div class="flex gap-2 mt-4">
+                <button class="secondary" onclick="setFamilyCoreJobStatus('${job.id}', 'processing')">Processing</button>
+                <button class="success" onclick="setFamilyCoreJobStatus('${job.id}', 'done')">Done</button>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderFamilyCoreInbox(items) {
+      const container = document.getElementById('family-inbox-list');
+      const count = document.getElementById('family-inbox-count');
+      if (count) count.innerText = items.length;
+
+      if (!items.length) {
+        container.innerHTML = '<p style="text-align:center; padding: 20px;">No saved inbox items.</p>';
+        return;
+      }
+
+      container.innerHTML = items.map(item => {
+        const processed = item.processedAt ? new Date(item.processedAt).toLocaleString([], {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }) : 'saved';
+        const file = item.mdFile || item.mdPath || 'local file';
+        return `
+          <div class="job-item status-done">
+            <div class="flex justify-between items-center mb-4">
+              <span class="tag done">saved</span>
+              <span style="font-size:12px; color:var(--text-dim)">${processed}</span>
+            </div>
+            <div style="font-weight:bold; margin-bottom: 4px;">${escapeHtml(item.title || item.id)}</div>
+            <p>${escapeHtml(file)}</p>
+          </div>
+        `;
+      }).join('');
+    }
+
     function sendQuick(text) {
       document.getElementById('chat-input').value = text;
       sendChat();
@@ -608,9 +953,22 @@
     async function fetchStatus() {
       const data = await api('/status');
       if (data && data.ok) {
+        document.getElementById('app-version').innerText = `v${data.version || '0.6.0'}`;
         document.getElementById('pending-count').innerText = data.pendingApprovals;
+        document.getElementById('queued-family-count').innerText = data.queuedFamilyCoreJobs || 0;
+        document.getElementById('family-inbox-count').innerText = data.familyCoreInboxCount || 0;
+        updateWorkerUI(data.familyCoreWorker);
         updateStrictUI(data.strictMode);
       }
+    }
+
+    function updateWorkerUI(worker) {
+      const pill = document.getElementById('worker-status-pill');
+      if (!pill || !worker) return;
+      const state = worker.state || 'unknown';
+      const ageSeconds = Number.isFinite(worker.ageMs) ? Math.max(0, Math.round(worker.ageMs / 1000)) : null;
+      pill.innerText = ageSeconds === null ? `Worker: ${state.toUpperCase()}` : `Worker: ${state.toUpperCase()} ${ageSeconds}s`;
+      pill.className = `agent-status ${state}`;
     }
 
     // fetchStatus defined below with strict mode support
@@ -726,6 +1084,11 @@
           if (data.event === 'message_new') {
             logEvent('New message received');
             fetchMessages();
+          }
+          if (data.event === 'family_core_job_new' || data.event === 'family_core_job_status') {
+            fetchFamilyCoreJobs();
+            fetchFamilyCoreInbox();
+            fetchStatus();
           }
           if (data.event === 'agent_status') {
             updateAgentUI(data.payload);
