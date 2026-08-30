@@ -25,6 +25,8 @@ describe('Family Core section status check', () => {
         expect(STATUS_SCRIPT).toContain("execFileAsync('nc'");
         expect(STATUS_SCRIPT).toContain('WINDOWS_PORTS');
         expect(STATUS_SCRIPT).toContain('openPorts');
+        expect(STATUS_SCRIPT).toContain('docs/windows_pc_physical_recovery.md');
+        expect(DOC).toContain('docs/windows_pc_physical_recovery.md');
     });
 
     it('does not read or print pairing codes or saved file contents', () => {

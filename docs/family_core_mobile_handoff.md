@@ -145,6 +145,8 @@ npm run status:family-core
 
 This read-only check verifies the local bridge, worker heartbeat, Mac Inbox summary, LAN `/share` entrypoint, private Sites publication, and current Windows PC visibility. Windows visibility includes Tailscale status, LAN ping, ARP state, and basic SMB/RDP/WinRM/SSH/HTTP/HTTPS/VNC port probes.
 
+When the Windows PC is offline, use `docs/windows_pc_physical_recovery.md` at the machine before attempting repair commands.
+
 ## Verification
 
 Expected quick checks:

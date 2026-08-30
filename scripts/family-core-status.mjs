@@ -6,6 +6,7 @@ const execFileAsync = promisify(execFile);
 const DEFAULT_BRIDGE_URL = 'http://127.0.0.1:8791';
 const DEFAULT_LAN_URL = 'http://192.168.1.198:8791';
 const DEFAULT_SITE_URL = 'https://family-knowledge-library.igor-gonchar-6186.chatgpt.site';
+const WINDOWS_RUNBOOK = 'docs/windows_pc_physical_recovery.md';
 const WINDOWS_HOST = 'Igor-Gaming';
 const WINDOWS_LAN_CANDIDATES = ['192.168.1.217', '192.168.1.218'];
 const WINDOWS_PORTS = [
@@ -137,6 +138,7 @@ async function buildReport() {
         },
         windows: {
             host: WINDOWS_HOST,
+            runbook: WINDOWS_RUNBOOK,
             lanCandidates: WINDOWS_LAN_CANDIDATES.map((host) => ({ host, reachable: false })),
             reachable: false
         }
@@ -206,6 +208,9 @@ function printHuman(report) {
     console.log(`- Phone share: ${report.phone.ok ? 'ready' : 'not ready'} (${report.phone.shareEntrypoint})`);
     console.log(`- Published site: ${report.site.private ? 'private/owner-only' : 'attention'} (${report.site.url})`);
     console.log(`- Windows PC: ${report.windows.reachable ? 'reachable' : 'offline / physical check needed'}`);
+    if (!report.windows.reachable) {
+        console.log(`  - next: ${report.windows.runbook}`);
+    }
     for (const candidate of report.windows.lanCandidates) {
         const ports = candidate.openPorts.map((item) => `${item.name}:${item.port}`).join(', ') || 'none';
         console.log(`  - ${candidate.host}: ping=${candidate.reachable ? 'yes' : 'no'}, arp=${candidate.arp?.state || 'unknown'}, open_ports=${ports}`);
