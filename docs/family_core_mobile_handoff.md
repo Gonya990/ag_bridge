@@ -143,7 +143,7 @@ Whole-section status check:
 npm run status:family-core
 ```
 
-This read-only check verifies the local bridge, worker heartbeat, Mac Inbox summary, LAN `/share` entrypoint, private Sites publication, and current Windows PC visibility.
+This read-only check verifies the local bridge, worker heartbeat, Mac Inbox summary, LAN `/share` entrypoint, private Sites publication, and current Windows PC visibility. Windows visibility includes Tailscale status, LAN ping, ARP state, and basic SMB/RDP/WinRM/SSH/HTTP/HTTPS/VNC port probes.
 
 ## Verification
 

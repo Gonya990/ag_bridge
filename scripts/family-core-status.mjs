@@ -8,6 +8,15 @@ const DEFAULT_LAN_URL = 'http://192.168.1.198:8791';
 const DEFAULT_SITE_URL = 'https://family-knowledge-library.igor-gonchar-6186.chatgpt.site';
 const WINDOWS_HOST = 'Igor-Gaming';
 const WINDOWS_LAN_CANDIDATES = ['192.168.1.217', '192.168.1.218'];
+const WINDOWS_PORTS = [
+    { name: 'rdp', port: 3389 },
+    { name: 'smb', port: 445 },
+    { name: 'winrm', port: 5985 },
+    { name: 'ssh', port: 22 },
+    { name: 'http', port: 80 },
+    { name: 'https', port: 443 },
+    { name: 'vnc', port: 5900 }
+];
 
 const args = process.argv.slice(2);
 const hasArg = (name) => args.includes(name);
@@ -50,6 +59,45 @@ async function ping(host) {
     } catch {
         return false;
     }
+}
+
+async function arpStatus(host) {
+    try {
+        const { stdout } = await execFileAsync('arp', ['-n', host], { timeout: 2500 });
+        const line = stdout.split('\n').find((row) => row.includes(host)) || '';
+        if (!line) return { found: false, state: 'missing' };
+        if (line.includes('(incomplete)')) return { found: true, state: 'incomplete' };
+        const mac = line.match(/ at ([0-9a-f:]{11,17}) /i)?.[1] || null;
+        return { found: true, state: mac ? 'resolved' : 'unknown', mac };
+    } catch {
+        return { found: false, state: 'missing' };
+    }
+}
+
+async function portOpen(host, port) {
+    try {
+        await execFileAsync('nc', ['-z', '-G', '1', host, String(port)], { timeout: 2500 });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function readLanCandidate(host) {
+    const [reachable, arp, ports] = await Promise.all([
+        ping(host),
+        arpStatus(host),
+        Promise.all(WINDOWS_PORTS.map(async (item) => ({
+            ...item,
+            open: await portOpen(host, item.port)
+        })))
+    ]);
+    return {
+        host,
+        reachable,
+        arp,
+        openPorts: ports.filter((item) => item.open)
+    };
 }
 
 async function readWindowsTailnet() {
@@ -138,11 +186,9 @@ async function buildReport() {
     }
 
     report.windows.tailnet = await readWindowsTailnet();
-    report.windows.lanCandidates = await Promise.all(
-        WINDOWS_LAN_CANDIDATES.map(async (host) => ({ host, reachable: await ping(host) }))
-    );
+    report.windows.lanCandidates = await Promise.all(WINDOWS_LAN_CANDIDATES.map(readLanCandidate));
     report.windows.reachable = Boolean(report.windows.tailnet.online)
-        || report.windows.lanCandidates.some((candidate) => candidate.reachable);
+        || report.windows.lanCandidates.some((candidate) => candidate.reachable || candidate.openPorts.length);
 
     report.ok = Boolean(
         report.bridge.ok
@@ -160,6 +206,10 @@ function printHuman(report) {
     console.log(`- Phone share: ${report.phone.ok ? 'ready' : 'not ready'} (${report.phone.shareEntrypoint})`);
     console.log(`- Published site: ${report.site.private ? 'private/owner-only' : 'attention'} (${report.site.url})`);
     console.log(`- Windows PC: ${report.windows.reachable ? 'reachable' : 'offline / physical check needed'}`);
+    for (const candidate of report.windows.lanCandidates) {
+        const ports = candidate.openPorts.map((item) => `${item.name}:${item.port}`).join(', ') || 'none';
+        console.log(`  - ${candidate.host}: ping=${candidate.reachable ? 'yes' : 'no'}, arp=${candidate.arp?.state || 'unknown'}, open_ports=${ports}`);
+    }
 }
 
 const report = await buildReport();

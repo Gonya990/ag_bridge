@@ -21,6 +21,10 @@ describe('Family Core section status check', () => {
         expect(STATUS_SCRIPT).toContain('Igor-Gaming');
         expect(STATUS_SCRIPT).toContain('192.168.1.217');
         expect(STATUS_SCRIPT).toContain('192.168.1.218');
+        expect(STATUS_SCRIPT).toContain("execFileAsync('arp'");
+        expect(STATUS_SCRIPT).toContain("execFileAsync('nc'");
+        expect(STATUS_SCRIPT).toContain('WINDOWS_PORTS');
+        expect(STATUS_SCRIPT).toContain('openPorts');
     });
 
     it('does not read or print pairing codes or saved file contents', () => {
