@@ -122,7 +122,10 @@ async function api(path, method = 'GET', body = null) {
     const res = await fetch(`${BASE_URL}${path}`, options);
     if (!res.ok) {
         const text = await res.text();
-        throw new Error(`${method} ${path} failed: ${res.status} ${text}`);
+        const err = new Error(`${method} ${path} failed: ${res.status} ${text}`);
+        err.status = res.status;
+        err.responseText = text;
+        throw err;
     }
     return res.json();
 }
@@ -161,46 +164,64 @@ async function writeWorkerStatus(status) {
 }
 
 export async function processQueuedJobs() {
-    await writeWorkerStatus({ state: 'running', lastPollAt: new Date().toISOString(), processed: 0, failed: 0 });
-    const data = await api('/family-core/jobs?status=queued&limit=10');
-    const jobs = Array.isArray(data.jobs) ? data.jobs : [];
-    const results = [];
+    const lastPollAt = new Date().toISOString();
+    await writeWorkerStatus({ state: 'running', lastPollAt, processed: 0, failed: 0 });
 
-    for (const job of jobs) {
-        try {
-            await api(`/family-core/jobs/${job.id}/status`, 'POST', {
-                status: 'processing',
-                note: job.note || ''
-            });
-            const files = await writeInboxFiles(job);
-            await updateInboxIndex(job, files);
-            await updateInboxJsonIndex(job, files);
-            await api(`/family-core/jobs/${job.id}/status`, 'POST', {
-                status: 'done',
-                note: `Saved locally on Mac: ${files.mdPath}`
-            });
-            results.push({ id: job.id, ok: true, ...files });
-        } catch (err) {
-            await api(`/family-core/jobs/${job.id}/status`, 'POST', {
-                status: 'failed',
-                note: `Worker failed: ${err.message}`
-            }).catch(() => {});
-            results.push({ id: job.id, ok: false, error: err.message });
+    try {
+        const data = await api('/family-core/jobs?status=queued&limit=10');
+        const jobs = Array.isArray(data.jobs) ? data.jobs : [];
+        const results = [];
+
+        for (const job of jobs) {
+            try {
+                await api(`/family-core/jobs/${job.id}/status`, 'POST', {
+                    status: 'processing',
+                    fromStatus: 'queued',
+                    note: job.note || ''
+                });
+                const files = await writeInboxFiles(job);
+                await updateInboxIndex(job, files);
+                await updateInboxJsonIndex(job, files);
+                await api(`/family-core/jobs/${job.id}/status`, 'POST', {
+                    status: 'done',
+                    note: `Saved locally on Mac: ${files.mdPath}`
+                });
+                results.push({ id: job.id, ok: true, ...files });
+            } catch (err) {
+                if (err.status === 409) {
+                    results.push({ id: job.id, ok: true, skipped: true, reason: 'already_claimed' });
+                    continue;
+                }
+                await api(`/family-core/jobs/${job.id}/status`, 'POST', {
+                    status: 'failed',
+                    note: `Worker failed: ${err.message}`
+                }).catch(() => {});
+                results.push({ id: job.id, ok: false, error: err.message });
+            }
         }
+
+        const processed = results.filter(result => result.ok && !result.skipped).length;
+        const failed = results.filter(result => !result.ok).length;
+        await writeWorkerStatus({
+            state: failed ? 'degraded' : 'running',
+            lastPollAt: new Date().toISOString(),
+            lastProcessedAt: results.length ? new Date().toISOString() : null,
+            processed,
+            failed,
+            lastResults: results.slice(-5)
+        });
+
+        return results;
+    } catch (err) {
+        await writeWorkerStatus({
+            state: 'degraded',
+            lastPollAt: new Date().toISOString(),
+            lastError: err.message,
+            processed: 0,
+            failed: 1
+        }).catch(() => {});
+        throw err;
     }
-
-    const processed = results.filter(result => result.ok).length;
-    const failed = results.filter(result => !result.ok).length;
-    await writeWorkerStatus({
-        state: failed ? 'degraded' : 'running',
-        lastPollAt: new Date().toISOString(),
-        lastProcessedAt: results.length ? new Date().toISOString() : null,
-        processed,
-        failed,
-        lastResults: results.slice(-5)
-    });
-
-    return results;
 }
 
 async function loop() {

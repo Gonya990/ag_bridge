@@ -830,29 +830,34 @@
       submitButton.disabled = true;
       submitButton.innerText = 'Sending...';
       setSaveState('Sending to Mac...');
-      const data = await api('/family-core/jobs', 'POST', {
-        title,
-        note,
-        source: 'phone',
-        payload: {
-          app: 'Family Knowledge Library',
-          requestedFrom: navigator.userAgent
-        }
-      });
+      try {
+        const data = await api('/family-core/jobs', 'POST', {
+          title,
+          note,
+          source: 'phone',
+          payload: {
+            app: 'Family Knowledge Library',
+            requestedFrom: navigator.userAgent
+          }
+        });
 
-      if (data && data.ok) {
-        titleInput.value = '';
-        noteInput.value = '';
-        localStorage.removeItem(FAMILY_DRAFT_KEY);
-        setSaveState('Sent to Mac.', 'ready');
-        fetchFamilyCoreJobs();
-        fetchFamilyCoreInbox();
-        fetchStatus();
-      } else {
+        if (data && data.ok) {
+          titleInput.value = '';
+          noteInput.value = '';
+          localStorage.removeItem(FAMILY_DRAFT_KEY);
+          setSaveState('Sent to Mac.', 'ready');
+          fetchFamilyCoreJobs();
+          fetchFamilyCoreInbox();
+          fetchStatus();
+        } else {
+          setSaveState('Could not send. Draft stayed on this device.', 'error');
+        }
+      } catch (err) {
         setSaveState('Could not send. Draft stayed on this device.', 'error');
+      } finally {
+        submitButton.disabled = false;
+        submitButton.innerText = 'Send to Mac';
       }
-      submitButton.disabled = false;
-      submitButton.innerText = 'Send to Mac';
     }
 
     async function setFamilyCoreJobStatus(id, status) {

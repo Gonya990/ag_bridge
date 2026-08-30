@@ -56,6 +56,24 @@ describe('Family Core job queue', () => {
         expect(res.body.job.note).toBe('Processed on Mac');
     });
 
+    it('rejects stale Family Core job status transitions', async () => {
+        const createRes = await request(app)
+            .post('/family-core/jobs')
+            .send({
+                title: 'Atomic claim candidate',
+                source: 'phone'
+            });
+        const claimId = createRes.body.job.id;
+
+        const res = await request(app)
+            .post(`/family-core/jobs/${claimId}/status`)
+            .send({ status: 'processing', fromStatus: 'done' });
+
+        expect(res.status).toBe(409);
+        expect(res.body.error).toBe('status_mismatch');
+        expect(res.body.currentStatus).toBe('queued');
+    });
+
     it('rejects invalid Family Core job status values', async () => {
         const res = await request(app)
             .post(`/family-core/jobs/${jobId}/status`)

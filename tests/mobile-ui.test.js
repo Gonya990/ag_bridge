@@ -33,6 +33,9 @@ describe('Mobile Family Core UI', () => {
         expect(HTML).toContain('function restoreFamilyDraft()');
         expect(HTML).toContain('function bindFamilyDraftAutosave()');
         expect(HTML).toContain('localStorage.removeItem(FAMILY_DRAFT_KEY)');
+        expect(HTML).toContain('} catch (err) {');
+        expect(HTML).toContain('} finally {');
+        expect(HTML).toContain("submitButton.innerText = 'Send to Mac'");
     });
 
     it('uses one polling timer and animated queue transitions', () => {
@@ -77,5 +80,6 @@ describe('Mobile Family Core UI', () => {
         expect(MANIFEST.scope).toBe('/');
         expect(SERVICE_WORKER).toContain("const CACHE_NAME = 'ag-bridge-v2'");
         expect(SERVICE_WORKER).toContain("'/share'");
+        expect(SERVICE_WORKER).toContain('ignoreSearch: true');
     });
 });

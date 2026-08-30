@@ -3,6 +3,7 @@ import fs from 'fs';
 import { mkdtemp, rm, readdir, readFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path, { join } from 'path';
+import { pathToFileURL } from 'url';
 import { app, server } from '../server.mjs';
 
 const ROOT = path.resolve(__dirname, '..');
@@ -92,5 +93,28 @@ describe('Family Core worker', () => {
     it('keeps the local Mac inbox out of Git', () => {
         expect(GITIGNORE).toContain('data/family-core-inbox/');
         expect(GITIGNORE).toContain('data/family-core-worker-status.json');
+    });
+
+    it('writes degraded status when the queue poll fails', async () => {
+        const degradedDir = await mkdtemp(join(tmpdir(), 'family-core-worker-degraded-'));
+        const degradedStatusFile = join(degradedDir, 'family-core-worker-status.json');
+        process.env.FAMILY_CORE_BASE_URL = 'http://127.0.0.1:9';
+        process.env.FAMILY_CORE_INBOX_DIR = degradedDir;
+        process.env.FAMILY_CORE_STATUS_FILE = degradedStatusFile;
+
+        const workerUrl = pathToFileURL(path.join(ROOT, 'scripts/family-core-worker.mjs'));
+        workerUrl.searchParams.set('degraded', String(Date.now()));
+        const worker = await import(workerUrl.href);
+        await expect(worker.processQueuedJobs()).rejects.toThrow();
+
+        const status = JSON.parse(await readFile(degradedStatusFile, 'utf-8'));
+        expect(status.state).toBe('degraded');
+        expect(status.failed).toBe(1);
+        expect(status.lastError).toBeTruthy();
+
+        process.env.FAMILY_CORE_BASE_URL = baseUrl;
+        process.env.FAMILY_CORE_INBOX_DIR = inboxDir;
+        process.env.FAMILY_CORE_STATUS_FILE = statusFile;
+        await rm(degradedDir, { recursive: true, force: true });
     });
 });

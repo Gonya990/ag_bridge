@@ -711,7 +711,7 @@ app.get('/family-core/inbox', checkAuth, (req, res) => {
 // POST /family-core/jobs/:id/status
 app.post('/family-core/jobs/:id/status', checkAuth, (req, res) => {
     const { id } = req.params;
-    const { status, note } = req.body || {};
+    const { status, note, fromStatus } = req.body || {};
     const allowed = new Set(['queued', 'processing', 'done', 'failed']);
 
     if (!allowed.has(status)) {
@@ -720,6 +720,16 @@ app.post('/family-core/jobs/:id/status', checkAuth, (req, res) => {
 
     const job = (STATE.familyCoreJobs || []).find(item => item.id === id);
     if (!job) return res.status(404).json({ ok: false, error: 'not_found' });
+
+    if (typeof fromStatus === 'string' && job.status !== fromStatus) {
+        return res.status(409).json({
+            ok: false,
+            error: 'status_mismatch',
+            expected: fromStatus,
+            currentStatus: job.status,
+            job
+        });
+    }
 
     job.status = status;
     job.updatedAt = new Date().toISOString();
